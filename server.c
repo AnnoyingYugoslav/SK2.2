@@ -12,8 +12,6 @@
 #include <sys/time.h>
 
 
-#define UDP_PORT 12345
-#define TCP_PORT 1115
 #define PI 3.14159265358979323846
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -41,12 +39,20 @@ struct GraczTCP client_names[MAX_PLAYERS];
 int client_count = 0;
 pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int UDP_PORT;
+int TCP_PORT;
+
 bool is_not_colliding(int numb);
 void *game_handler(void *ptr);
 void move_snake(int i, int j);
 void* handle_disconnects(void*ptr);
 
-int main(){
+int main(int argc, char *argv[]){
+    if (argc != 3) {
+        printf("Usage: %s <TCP_PORT> <UDP_PORT>\n", argv[0]);
+    }
+    TCP_PORT = atoi(argv[1]);
+    UDP_PORT = atoi(argv[2]);
     pthread_t threadTCP;
     struct sockaddr_in sa;
     int SocketFD = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
