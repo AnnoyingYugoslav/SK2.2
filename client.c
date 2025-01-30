@@ -18,6 +18,8 @@
 
 //gcc -o snake_game client.c -lSDL2 -lm -lSDL2_ttf
 
+
+#define LAUNCHER 11111
 #define PI 3.14159265358979323846
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -67,6 +69,7 @@ void move_snake(int numb, int dir); //move the snake
 void send_UDP(struct sockaddr_in socket, int sock); //send my direction to server
 void read_TCP(int socket); //read from server
 void* handle_cancel(void* arg);
+void call_launcher(struct sockaddr_in launcher, char * port);
 
 int main(int argc, char *argv[]) {
     last_accepted_move = 0;
@@ -383,6 +386,14 @@ int render_connect_screen(SDL_Renderer *renderer) {
             printf("%s\n", input1Text);
             printf("%s\n", input2Text);
             int port = atoi(input2Text); //get it in the windows
+            struct sockaddr_in launcher;
+            memset(&launcher, 0, sizeof(launcher));
+            launcher.sin_family = AF_INET;
+            launcher.sin_addr.s_addr = inet_addr(input1Text); // Assuming the launcher is at the same address
+            launcher.sin_port = htons(LAUNCHER);
+            call_launcher(launcher, input2Text);
+            printf("Waiting for server to open: \n");
+            sleep(2);
             SocketFD = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (SocketFD == -1) {
                 printf("cannot create socket\n");
@@ -766,4 +777,11 @@ void read_TCP(int socket){
         }
         last_accepted_move = directions[myNumber];
     }
+}
+
+void call_launcher(struct sockaddr_in launcher, char* port){
+    printf("Calling launcher, %s\n", port);
+    int SocketFD = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    sendto(SocketFD, port, strlen(port), 0, (struct sockaddr *)&launcher, sizeof launcher);
+    close(SocketFD);
 }
