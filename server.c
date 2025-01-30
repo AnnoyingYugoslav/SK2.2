@@ -25,7 +25,7 @@ typedef struct {
 } Point;
 
 Point snake[MAX_PLAYERS][SNAKE_LENGTH];
-int snake_length = 0;
+int snake_length = 1;
 int score[MAX_PLAYERS];
 int counter = 0;
 int alive = 4;
@@ -55,7 +55,7 @@ int main(){
     }
     memset(&sa, 0, sizeof sa);
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(1102);
+    sa.sin_port = htons(1103);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(SocketFD, (struct sockaddr *)&sa, sizeof sa) == -1) {
         perror("bind failed");
