@@ -47,7 +47,6 @@ bool change = false;
 char myName[64] = ""; //my name
 char serverAdress[64] = "";
 int directions[4] = {0,0,0,0};
-int mynumber = -1;
 pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int counter[MAX_PLAYERS]; // Array to store the counter for each player
@@ -451,28 +450,24 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
         name = getNames(socket);
 
         if (strcmp("", name) != 0) { //it read smth
-            if (strcmp("@Error", name) == 0) { //-1 got returned
-                printf("E1\n");
+            if (strcmp("@Error", name) == 0) {
                 continue;
             }
-            else if (getPort) {
-                port = atoi(name);
-                printf("Port: %d\n", port);
-                getMyNumber = true;
-                getPort = false;
-            }
             else if(getMyNumber){
-                mynumber = atoi(name);
-                myNumber = mynumber;
-                printf("I am player %d\n", mynumber);
+                int myumber;
+                sscanf(name, "%d.%d\n", &myumber, &port);
+                myNumber = myumber;
+                printf("I am player %d\n", myNumber);
                 getMyNumber = false;
+                sleep(0.1);
+                printf("Port: %d\n", port);
                 on_wait_screen = false;
                 on_game_screen = true;
                 return port;
             }
             else if (strcmp("@Start", name) == 0) { //game started
                 printf("Game start detected\n");
-                getPort = true;
+                getMyNumber = true;
             }
             else if (strncmp("@Disconnected", name, strlen("@Disconnected")) == 0) { //handle Disconnect
                 char *client_name = name + strlen("@Disconnected ");

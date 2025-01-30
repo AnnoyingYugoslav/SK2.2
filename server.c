@@ -13,7 +13,7 @@
 
 
 #define UDP_PORT 12345
-#define TCP_PORT 1111
+#define TCP_PORT 1115
 #define PI 3.14159265358979323846
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -142,7 +142,7 @@ int main(){
     }
 
     char str[8];
-    char str2[8];
+    char str2[32];
     memset(str, 0, sizeof str);
     sprintf(str, "%d", UDP_PORT);
     char buff[32];
@@ -153,11 +153,15 @@ int main(){
         memset(str2, 0, sizeof str2);
         write(client_names[i].socket, buff, sizeof(buff));
         sleep(0.2);
-        write(client_names[i].socket, str, sizeof(str));
+        snprintf(str2, sizeof str2, "%d.%d", i, UDP_PORT);
+        if (send(client_names[i].socket, str2, sizeof(str2), 0) < 1) {
+            perror("send str2");
+        }
+        printf("Sent %s to %d\n", str2, client_names[i].socket);
         sleep(0.2);
-        sprintf(str2, "%d", i);
-        write(client_names[i].socket, str2, sizeof(str2));
-        printf("Sent %s, %s, %s to %d\n", buff, str, str2, i);
+        write(client_names[i].socket, str, sizeof(str));
+        printf("Sent %s, %s to %d\n", buff, str2, i);
+        sleep(0.2);
     }
 
     //set starting positions
@@ -166,7 +170,6 @@ int main(){
         int gray = i ^ (i >> 1);
         snake[i][0].x = ((gray & 2) >> 1) * 3;
         snake[i][0].y = (gray & 1) * 3;
-        printf("Player %d: Start Position -> x: %d, y: %d\n", i, snake[i][0].x, snake[i][0].y);
     }
 
     while (alive > 1) {
