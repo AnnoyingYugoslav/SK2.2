@@ -43,7 +43,7 @@ pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
 bool is_not_colliding(int numb);
 void *game_handler(void *ptr);
 void move_snake(int i, int j);
-void handle_disconnects(void*ptr);
+void* handle_disconnects(void*ptr);
 
 int main(){
     pthread_t threadTCP;
@@ -55,7 +55,7 @@ int main(){
     }
     memset(&sa, 0, sizeof sa);
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(1101);
+    sa.sin_port = htons(1102);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(SocketFD, (struct sockaddr *)&sa, sizeof sa) == -1) {
         perror("bind failed");
@@ -69,7 +69,7 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-   while(client_count < MAX_PLAYERS){
+    while(client_count < MAX_PLAYERS){
         int ConnectFD = accept(SocketFD, NULL, NULL);
         if (ConnectFD == -1) {
             perror("accept failed");
@@ -87,20 +87,14 @@ int main(){
         int *new_sock = malloc(sizeof(int));
         if (!new_sock) {
             close(ConnectFD);
+            pthread_mutex_unlock(&client_mutex);
             continue;
         }
         *new_sock = ConnectFD;
-        pthread_mutex_lock(&client_mutex);
-        if (pthread_create(&threadTCP, NULL, handle_disconnects, (void *)new_sock) != 0) {
-            close(ConnectFD);
-            free(new_sock);
-        } else {
-            pthread_detach(threadTCP);
-        }
-        // Send all other users the new user's name
+        // Send all other users the new user name
         for(int i = 0; i < client_count; i++){
             write(client_names[i].socket, buff, sizeof(buff));
-            printf("Sentl2 %s to %d\n", buff, i);
+            printf("Sent %s to %d\n", buff, client_names[i].socket);
         }
 
         // Add the new user to the current users
@@ -113,15 +107,22 @@ int main(){
         for(int i = 0; i < client_count; i++){
             write(ConnectFD, client_names[i].name, sizeof(client_names[i].name));
             sleep(0.2);
-            printf("Sent %s to %d\n", client_names[i].name, i);
+            printf("Sent %s to %d\n", client_names[i].name, ConnectFD);
         }
-
+        if (pthread_create(&threadTCP, NULL, handle_disconnects, (void *)new_sock) != 0) {
+            close(ConnectFD);
+            free(new_sock);
+            pthread_mutex_unlock(&client_mutex);
+            continue;
+        } else {
+            pthread_detach(threadTCP);
+        }
         pthread_mutex_unlock(&client_mutex);
     }
+
     sleep(3); //make sure all is read on client side
     struct sockaddr_in localAddress, clientAddress;
-    int clientAddrLen = sizeof(clientAddress);
-    pthread_t threadUDP;
+    socklen_t clientAddrLen = sizeof(clientAddress);
     localAddress.sin_family = AF_INET;
     localAddress.sin_port = htons(UDP_PORT);
     localAddress.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -138,6 +139,7 @@ int main(){
         close(SocketFD);
         exit(EXIT_FAILURE);
     }
+
     char str[8];
     char str2[8];
     memset(str, 0, sizeof str);
@@ -145,15 +147,18 @@ int main(){
     char buff[32];
     memset(buff, 0, sizeof buff);
     strncpy(buff, "@Start", sizeof(buff) - 1);
-    buff[sizeof(buff) - 1] = '\0';
+    buff[sizeof(buff) - 1] = '\n';
     for(int i = 0; i < client_count; i++){
         memset(str2, 0, sizeof str2);
         write(client_names[i].socket, buff, sizeof(buff));
+        sleep(0.2);
         write(client_names[i].socket, str, sizeof(str));
+        sleep(0.2);
         sprintf(str2, "%d\n", i);
         write(client_names[i].socket, str2, sizeof(str2));
-        printf("Sent %s, %s, %s to %d\n", buff,str, str2, i);
+        printf("Sent %s, %s, %s to %d\n", buff, str, str2, i);
     }
+
     //set starting positions
     int alive = client_count;
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -162,70 +167,69 @@ int main(){
         snake[i][0].y = (gray & 1) * 3;
         printf("Player %d: Start Position -> x: %d, y: %d\n", i, snake[i][0].x, snake[i][0].y);
     }
+
     while (alive > 1) {
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 300000; // 300 ms
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(server_socket, &read_fds);
-    int select_result = select(server_socket + 1, &read_fds, NULL, NULL, &timeout);
-    while (select_result > 0) {
-        char buffer[256];
-        memset(buffer, 0, sizeof buffer);
-        int bytes_received = recvfrom(server_socket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
-        if (bytes_received > 0) {
-            int number = -1;
-            int direction2 = 0;
-            sscanf(buffer, "%d.%d\n", &number, &direction2);
-            if(number > -1 && number < client_count && direction2 > -1 && direction2 < 4){
-                direction[number] = direction2;
-            }
-        }
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 300000; // 300 ms
+        fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(server_socket, &read_fds);
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 0; // No wait, just poll
-        select_result = select(server_socket + 1, &read_fds, NULL, NULL, &timeout);
-    }
+        int select_result = select(server_socket + 1, &read_fds, NULL, NULL, &timeout);
+        while (select_result > 0) {
+            char buffer[256];
+            memset(buffer, 0, sizeof buffer);
+            int bytes_received = recvfrom(server_socket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
+            if (bytes_received > 0) {
+                int number = -1;
+                int direction2 = 0;
+                sscanf(buffer, "%d.%d\n", &number, &direction2);
+                if(number > -1 && number < client_count && direction2 > -1 && direction2 < 4){
+                    direction[number] = direction2;
+                }
+            }
+            FD_ZERO(&read_fds);
+            FD_SET(server_socket, &read_fds);
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 0; // No wait, just poll
+            select_result = select(server_socket + 1, &read_fds, NULL, NULL, &timeout);
+        }
 
-    // Process game state and send updates to clients
-    for(int i = 0; i < client_count; i++){
-        if(alPl[i] == 1){
-            move_snake(i, direction[i]);
-            if(!(is_not_colliding(i))){
-                alPl[i] = 0;
-                printf("Killed %d\n", i);
-                alive--;
+        // Process game state and send updates to clients
+        for(int i = 0; i < client_count; i++){
+            if(alPl[i] == 1){
+                move_snake(i, direction[i]);
+                if(!(is_not_colliding(i))){
+                    alPl[i] = 0;
+                    printf("Killed %d\n", i);
+                    alive--;
+                }
             }
         }
-    }
-    char buff[64];
-    int curmax = 0;
-    memset(buff, 0, sizeof buff);
-    for(int i = 0; i < client_count; i++){
-        if(alPl[i] == 1){
-            curmax += snprintf(buff+ curmax, sizeof buff, "%d.%d.", i, direction[i]);
+        char buff[64];
+        int curmax = 0;
+        memset(buff, 0, sizeof buff);
+        for(int i = 0; i < client_count; i++){
+            if(alPl[i] == 1){
+                curmax += snprintf(buff+ curmax, sizeof buff, "%d.%d.", i, direction[i]);
+            }
+            else{
+                curmax += snprintf(buff+ curmax, sizeof buff, "%d.%d.", i, 5);
+            }
         }
-        else{
-            curmax += snprintf(buff+ curmax, sizeof buff, "%d.%d.", i, 5);
+        for(int i = 0; i < client_count; i++){
+            write(client_names[i].socket, buff, sizeof buff);
+            printf("Sent %s to %d\n", buff, i);
         }
     }
+
     for(int i = 0; i < client_count; i++){
-        write(client_names[i].socket, buff, sizeof buff);
-        printf("Sent %s to %d\n", buff, i);
+        close(client_names[i].socket);
     }
+    close(SocketFD);
+    close(server_socket);
+    return 0;
 }
-
-for(int i = 0; i < client_count; i++){
-    close(client_names[i].socket);
-}
-close(SocketFD);
-close(server_socket);
-return 0;
-}
-
-
 
 bool is_not_colliding(int numb){
     //wall
@@ -268,23 +272,26 @@ void move_snake(int numb, int direction) {
     }
 }
 
-void handle_disconnects(void * ptr){
+void* handle_disconnects(void * ptr){
     int socket = *(int *)ptr;
     free(ptr);
     char buff[32];
-    read(socket, buff, sizeof(buff));
-    pthread_mutex_lock(&client_mutex);
-    if(strcmp("@Disconnect", buff) == 0){
-
-        for(int i = 0; i < client_count; i++){
-            if(client_names[i].socket == socket){
-                for(int j = i; j < client_count - 1; j++){
-                    client_names[j] = client_names[j + 1];
+    if(read(socket, buff, sizeof(buff)) > 0){
+        if(strcmp("@Disconnect", buff) == 0){
+            pthread_mutex_lock(&client_mutex);
+            for(int i = 0; i < client_count; i++){
+                if(client_names[i].socket == socket){
+                    printf("%s\n", client_names[i].name);
+                    for(int j = i; j < client_count - 1; j++){
+                        client_names[j] = client_names[j + 1];
+                    }
+                    client_count--;
+                    break;
                 }
-                client_count--;
-                break;
             }
+            pthread_mutex_unlock(&client_mutex);
         }
     }
-    pthread_mutex_unlock(&client_mutex);
+    close(socket);
+    return NULL;
 }

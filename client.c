@@ -7,17 +7,14 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-  
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <math.h>
-
 #include <pthread.h>
 #include <sys/select.h>
-
 
 //gcc -o snake_game client.c -lSDL2 -lm -lSDL2_ttf
 
@@ -27,6 +24,7 @@
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
 #define MAX_PLAYERS 3
+
 typedef struct {
     int x, y;
 } Point;
@@ -57,11 +55,12 @@ void render_start_screen(SDL_Renderer *renderer); //start screen
 void render_game_screen(SDL_Renderer *renderer); //actual game
 void render_end_screen(SDL_Renderer *renderer); //end screen
 int render_connect_screen(SDL_Renderer *renderer); //waiting for connection to server, returns my number
-int render_players_screen(SDL_Renderer *renderer, int socket); //wawiting for players 
-int* getUDPData(int socket, struct sockaddr_in *serverAdress); //get direction of playes according to server
-char* getNames( int socket );
-void set_nonblocking(int socket); //set TCP to non blocking - needed for reading player connecting
+int render_players_screen(SDL_Renderer *renderer, int socket); //waiting for players
+int* getUDPData(int socket, struct sockaddr_in *serverAdress); //get direction of players according to server
+char* getNames(int socket);
+void set_nonblocking(int socket); //set TCP to non-blocking - needed for reading player connecting
 void sendDisconnect(int socket);
+void set_blocking(int socket); //set TCP to blocking - needed for writing to server
 
 int main(int argc, char *argv[]) {
     pthread_t threadUDP;
@@ -77,7 +76,6 @@ int main(int argc, char *argv[]) {
     srand(time(NULL));
 
     SDL_Event e;
-    bool running = true;
     while (running) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
@@ -105,27 +103,27 @@ int main(int argc, char *argv[]) {
             if(portTCP != -1){
                 on_connect_screen = false;
                 on_wait_screen = true;
+                set_blocking(portTCP);
             }
         }
         else if(on_wait_screen){
             portUDP = render_players_screen(renderer, portTCP);
         }
         else if(on_game_screen){
-            
+            render_game_screen(renderer);
         }
         else if(on_end_screen){
-
+            render_end_screen(renderer);
         }
-        else if(connect_UDP){
 
-        }
         SDL_RenderPresent(renderer);
+        SDL_Delay(16); // Delay to limit the frame rate
     }
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    return 0;
 }
-
 
 void render_start_screen(SDL_Renderer *renderer) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -156,9 +154,15 @@ void render_start_screen(SDL_Renderer *renderer) {
         TTF_Quit();
         return;
     }
+    SDL_Rect textRect = {button.x + 10, button.y + 10, textSurface->w, textSurface->h};
+    SDL_FreeSurface(textSurface);
+    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+    SDL_DestroyTexture(textTexture);
+    TTF_CloseFont(font);
+    TTF_Quit();
+
     SDL_Event e;
     SDL_PollEvent(&e);
-    SDL_Rect textRect = {button.x + 10, button.y + 10, textSurface->w, textSurface->h};
     if (e.type == SDL_MOUSEBUTTONDOWN) {
         int x = e.button.x;
         int y = e.button.y;
@@ -167,29 +171,12 @@ void render_start_screen(SDL_Renderer *renderer) {
             on_connect_screen = true;
         }
     }
-    SDL_FreeSurface(textSurface);
-    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
-    SDL_DestroyTexture(textTexture);
-    TTF_CloseFont(font);
-    TTF_Quit();
 }
 
-void render_game_screen(SDL_Renderer *renderer){
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    for(int j = 0; j < currentplayers; j++){
-        if(directions[j] != 5){
-            for (int i = 0; i < snake_length; i++) {
-                SDL_Rect segment = {snake[j][i].x * GRID_SIZE, snake[j][i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE};
-                SDL_RenderFillRect(renderer, &segment);
-            }
-        }
-    }
-}
-
-int render_connect_screen(SDL_Renderer *renderer){
+int render_connect_screen(SDL_Renderer *renderer) {
     if (TTF_Init() < 0) {
         printf("Lib - connect\n");
-        return - 1;
+        return -1;
     }
     TTF_Font* font = TTF_OpenFont("font.ttf", 24);
     if (!font) {
@@ -199,8 +186,8 @@ int render_connect_screen(SDL_Renderer *renderer){
     SDL_Color textColor = {255, 255, 255, 255};
     SDL_Rect input1Rect = {100, 100, 200, 40};
     SDL_Rect input2Rect = {100, 160, 200, 40};
-    SDL_Rect buttonRect = {100, 220, 200, 40};
-    SDL_Rect input3Rect = {100, 280, 200, 40};
+    SDL_Rect input3Rect = {100, 220, 200, 40};
+    SDL_Rect buttonRect = {100, 280, 200, 40};
     bool input1Focused = false, input2Focused = false, input3Focused = false;
     char input1Text[256] = "";
     char input2Text[256] = "";
@@ -212,14 +199,19 @@ int render_connect_screen(SDL_Renderer *renderer){
             if (e.type == SDL_QUIT) {
                 quit = true;
             }
-            if (e.type == SDL_MOUSEBUTTONDOWN) { //if button
+            if (e.type == SDL_MOUSEBUTTONDOWN) {
                 int x, y;
                 SDL_GetMouseState(&x, &y);
                 if (x >= buttonRect.x && x <= buttonRect.x + buttonRect.w &&
                     y >= buttonRect.y && y <= buttonRect.y + buttonRect.h) {
-                    try_connect = !try_connect;
-                    printf("tryConnect = %s\n", try_connect ? "true" : "false");
+                    try_connect = true;
                 }
+                input1Focused = (x >= input1Rect.x && x <= input1Rect.x + input1Rect.w &&
+                                 y >= input1Rect.y && y <= input1Rect.y + input1Rect.h);
+                input2Focused = (x >= input2Rect.x && x <= input2Rect.x + input2Rect.w &&
+                                 y >= input2Rect.y && y <= input2Rect.y + input2Rect.h);
+                input3Focused = (x >= input3Rect.x && x <= input3Rect.x + input3Rect.w &&
+                                 y >= input3Rect.y && y <= input3Rect.y + input3Rect.h);
             }
             if (e.type == SDL_KEYDOWN) {
                 if (input1Focused) {
@@ -256,17 +248,8 @@ int render_connect_screen(SDL_Renderer *renderer){
                     }
                 }
             }
-            if (e.type == SDL_MOUSEBUTTONDOWN) { //if write in box
-                int x, y;
-                SDL_GetMouseState(&x, &y);
-                input1Focused = (x >= input1Rect.x && x <= input1Rect.x + input1Rect.w &&
-                                 y >= input1Rect.y && y <= input1Rect.y + input1Rect.h);
-                input2Focused = (x >= input2Rect.x && x <= input2Rect.x + input2Rect.w &&
-                                 y >= input2Rect.y && y <= input2Rect.y + input2Rect.h);
-                input3Focused = (x >= input3Rect.x && x <= input3Rect.x + input3Rect.w &&
-                                 y >= input3Rect.y && y <= input3Rect.y + input3Rect.h);
-            }
         }
+
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black background
         SDL_RenderClear(renderer);
 
@@ -307,25 +290,22 @@ int render_connect_screen(SDL_Renderer *renderer){
         // Present renderer to window
         SDL_RenderPresent(renderer);
 
-        if(try_connect){
+        if (try_connect) {
             try_connect = false;
             printf("TRYING\n");
             struct sockaddr_in sa;
             int SocketFD;
             printf("%s\n", input1Text);
             printf("%s\n", input2Text);
-            int port=atoi(input2Text); //get it in the windows
+            int port = atoi(input2Text); //get it in the windows
             SocketFD = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (SocketFD == -1) {
                 printf("cannot create socket\n");
-                try_connect = false;
                 return -1;
             }
             memset(&sa, 0, sizeof sa);
-            
-            sa.sin_addr.s_addr=inet_addr(input1Text); //get it from window
+            sa.sin_addr.s_addr = inet_addr(input1Text); //get it from window
             sa.sin_family = AF_INET;
-            
             sa.sin_port = htons(port);
 
             set_nonblocking(SocketFD);
@@ -339,9 +319,11 @@ int render_connect_screen(SDL_Renderer *renderer){
 
             if (result == 0) {
                 strcpy(serverAdress, input1Text);
-                write(SocketFD, input3Text, sizeof input3Text);
+                set_blocking(SocketFD);
+                write(SocketFD, input3Text, strlen(input3Text));
                 return SocketFD;
             }
+
             fd_set wfds;
             struct timeval tv;
             FD_ZERO(&wfds);
@@ -360,6 +342,7 @@ int render_connect_screen(SDL_Renderer *renderer){
                 close(SocketFD);
                 return -1;
             }
+
             int optval;
             socklen_t optlen = sizeof(optval);
             if (getsockopt(SocketFD, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1) {
@@ -372,15 +355,18 @@ int render_connect_screen(SDL_Renderer *renderer){
                 close(SocketFD);
                 return -1;
             }
-            write(SocketFD, input3Text, sizeof input3Text);
+
+            set_blocking(SocketFD);
+            write(SocketFD, input3Text, strlen(input3Text));
             strcpy(serverAdress, input1Text);
             return SocketFD;
         }
     }
     TTF_CloseFont(font);
+    return -1;
 }
 
-int render_players_screen(SDL_Renderer *renderer, int socket){
+int render_players_screen(SDL_Renderer *renderer, int socket) {
     if (TTF_Init() < 0) {
         printf("Lib - plt\n");
         return -1;
@@ -403,43 +389,44 @@ int render_players_screen(SDL_Renderer *renderer, int socket){
     SDL_Event e;
     bool quit = false;
     bool getPort = false;
-    bool getAdress = false;
-    while(!quit){
+    while (!quit) {
         while (SDL_PollEvent(&e)) {
-                if (e.type == SDL_QUIT) {
-                    quit = true;
+            if (e.type == SDL_QUIT) {
+                quit = true;
+            }
+            if (e.type == SDL_MOUSEBUTTONDOWN) {
+                int x, y;
+                SDL_GetMouseState(&x, &y);
+                printf("X: %d, Y: %d\n", x, y);
+                if (x >= buttonRect.x && x <= buttonRect.x + buttonRect.w &&
+                    y >= buttonRect.y && y <= buttonRect.y + buttonRect.h) {
+                    printf("Cancel, go to start\n");
+                    on_start_screen = true;
+                    on_connect_screen = false;
+                    on_end_screen = false;
+                    on_wait_screen = false;
+                    sendDisconnect(socket);
+                    return -1;
                 }
-                if (e.type == SDL_MOUSEBUTTONDOWN) {
-                    int x, y;
-                    SDL_GetMouseState(&x, &y);
-                    printf("X: %d, Y: %d\n", x, y);
-                    if (x >= buttonRect.x && x <= buttonRect.x + buttonRect.w &&
-                        y >= buttonRect.y && y <= buttonRect.y + buttonRect.h) {
-                        printf("Cancel, go to start\n");
-                        on_start_screen = true;
-                        on_connect_screen = false;
-                        on_end_screen = false;
-                        on_wait_screen = false;
-                        sendDisconnect(socket);
-                        return -1;
-                    }
-                }
+            }
         }
         char* name;
         name = getNames(socket);
-        
-        if(strcmp("", name) != 0){ //it read smth
-            if(strcmp("@Error", name) == 0){ //-1 got returned
-            printf("E1\n");
+
+        if (strcmp("", name) != 0) { //it read smth
+            if (strcmp("@Error", name) == 0) { //-1 got returned
+                printf("E1\n");
                 continue;
             }
-            else if(getPort){
+            else if (getPort) {
                 int port = atoi(name);
                 printf("Port: %d\n", port);
                 return port;
             }
-            else if(strcmp("@Start\n", name) == 0){ //game started
+            else if (strcmp("@Start\n", name) == 0) { //game started
+                printf("Game start detected\n");
                 on_wait_screen = false;
+                on_game_screen = true;
                 getPort = true;
             }
             else if (strncmp("@Disconnected", name, strlen("@Disconnected")) == 0) { //handle Disconnect
@@ -536,6 +523,13 @@ int render_players_screen(SDL_Renderer *renderer, int socket){
     return -1;
 }
 
+void render_game_screen(SDL_Renderer *renderer){
+
+}
+void render_end_screen(SDL_Renderer *renderer){
+
+}
+
 void move_snake(int numb, int dir) {
     for (int i = snake_length - 1; i > 0; i--) {
         snake[numb][i] = snake[0][i - 1];
@@ -557,12 +551,25 @@ void set_nonblocking(int socket) {
     fcntl(socket, F_SETFL, flags | O_NONBLOCK);
 }
 
+void set_blocking(int socket) {
+    int flags = fcntl(socket, F_GETFL, 0);
+    if (flags == -1) {
+        perror("fcntl F_GETFL");
+        return;
+    }
+    flags &= ~O_NONBLOCK;
+    if (fcntl(socket, F_SETFL, flags) == -1) {
+        perror("fcntl F_SETFL");
+    }
+}
+
 char* getNames(int socket){
-    static char buffer[1024];
+    static char buffer[64];
     memset(buffer, 0, sizeof(buffer));
 
     int bytes_read = read(socket, buffer, sizeof(buffer));
     if (bytes_read > 0) {
+        printf("Bytes read: %s\n", buffer);
         return buffer;
     }else if (bytes_read == -1) {
         return "@Error";
