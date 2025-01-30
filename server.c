@@ -13,6 +13,7 @@
 
 
 #define UDP_PORT 12345
+#define TCP_PORT 1111
 #define PI 3.14159265358979323846
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -55,7 +56,7 @@ int main(){
     }
     memset(&sa, 0, sizeof sa);
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(1103);
+    sa.sin_port = htons(TCP_PORT);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(SocketFD, (struct sockaddr *)&sa, sizeof sa) == -1) {
         perror("bind failed");
@@ -143,7 +144,7 @@ int main(){
     char str[8];
     char str2[8];
     memset(str, 0, sizeof str);
-    sprintf(str, "%d\n", UDP_PORT);
+    sprintf(str, "%d", UDP_PORT);
     char buff[32];
     memset(buff, 0, sizeof buff);
     strncpy(buff, "@Start", sizeof(buff) - 1);
@@ -154,7 +155,7 @@ int main(){
         sleep(0.2);
         write(client_names[i].socket, str, sizeof(str));
         sleep(0.2);
-        sprintf(str2, "%d\n", i);
+        sprintf(str2, "%d", i);
         write(client_names[i].socket, str2, sizeof(str2));
         printf("Sent %s, %s, %s to %d\n", buff, str, str2, i);
     }
@@ -186,6 +187,7 @@ int main(){
                 sscanf(buffer, "%d.%d\n", &number, &direction2);
                 if(number > -1 && number < client_count && direction2 > -1 && direction2 < 4){
                     direction[number] = direction2;
+                    printf("Received UDP: %s\n", buffer); // Debug statement
                 }
             }
             FD_ZERO(&read_fds);
@@ -222,7 +224,12 @@ int main(){
             printf("Sent %s to %d\n", buff, i);
         }
     }
-
+    memset(buff, 0, sizeof buff);
+    strcat(buff, "@End\n");
+    for(int i = 0; i < client_count; i++){
+            write(client_names[i].socket, buff, sizeof buff);
+            printf("Sent %s to %d\n", buff, i);
+        }
     for(int i = 0; i < client_count; i++){
         close(client_names[i].socket);
     }

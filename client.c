@@ -30,7 +30,7 @@ typedef struct {
 } Point;
 
 Point snake[MAX_PLAYERS][SNAKE_LENGTH];
-int snake_length = 1;
+int snake_length[MAX_PLAYERS]; // Array to store the length for each player
 Point food;
 int my_direction = 0; //gets my direction
 int myNumber = -1; //my player number on server
@@ -43,13 +43,14 @@ bool on_game_screen = false;
 bool on_end_screen = false;
 bool connect_TCP = false;
 bool connect_UDP = false;
+bool change = false;
 char myName[64] = ""; //my name
 char serverAdress[64] = "";
 int directions[4] = {0,0,0,0};
 int mynumber = -1;
 pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-int counter = 10;
+int counter[MAX_PLAYERS]; // Array to store the counter for each player
 int currentplayers = 0;
 
 void render_start_screen(SDL_Renderer *renderer); //start screen
@@ -62,7 +63,7 @@ char* getNames(int socket);
 void set_nonblocking(int socket); //set TCP to non-blocking - needed for reading player connecting
 void sendDisconnect(int socket);
 void set_blocking(int socket); //set TCP to blocking - needed for writing to server
-void move_snake(int numb, int dir) ; //move the snake
+void move_snake(int numb, int dir); //move the snake
 void send_UDP(struct sockaddr_in socket, int sock); //send my direction to server
 void read_TCP(int socket); //read from server
 
@@ -83,9 +84,10 @@ int main(int argc, char *argv[]) {
         int gray = i ^ (i >> 1);
         snake[i][0].x = ((gray & 2) >> 1) * 3;
         snake[i][0].y = (gray & 1) * 3;
+        snake_length[i] = 1; // Initialize snake length for each player
+        counter[i] = 10; // Initialize counter for each player
         printf("Player %d: Start Position -> x: %d, y: %d\n", i, snake[i][0].x, snake[i][0].y);
     }
-
 
     SDL_Event e;
     while (running) {
@@ -97,10 +99,10 @@ int main(int argc, char *argv[]) {
                 pthread_mutex_lock(&client_mutex);
                 printf("Key pressed\n");
                 switch (e.key.keysym.sym) {
-                    case SDLK_UP:    if (last_accepted_move != 1) my_direction = 3; printf("my_dire %d \n", my_direction); break;
-                    case SDLK_DOWN:  if (last_accepted_move != 3) my_direction = 1; printf("my_dire %d \n", my_direction); break;
-                    case SDLK_LEFT:  if (last_accepted_move != 0) my_direction = 2; printf("my_dire %d \n", my_direction); break;
-                    case SDLK_RIGHT: if (last_accepted_move != 2) my_direction = 0; printf("my_dire %d \n", my_direction); break;
+                    case SDLK_UP:    if (last_accepted_move != 1) my_direction = 3; printf("my_dire %d \n", my_direction); change = true; break;
+                    case SDLK_DOWN:  if (last_accepted_move != 3) my_direction = 1; printf("my_dire %d \n", my_direction); change = true; break;
+                    case SDLK_LEFT:  if (last_accepted_move != 0) my_direction = 2; printf("my_dire %d \n", my_direction); change = true; break;
+                    case SDLK_RIGHT: if (last_accepted_move != 2) my_direction = 0; printf("my_dire %d \n", my_direction); change = true; break;
                 }
                 pthread_mutex_unlock(&client_mutex);
             }
@@ -462,6 +464,7 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
             else if(getMyNumber){
                 mynumber = atoi(name);
                 myNumber = mynumber;
+                printf("I am player %d\n", mynumber);
                 getMyNumber = false;
                 on_wait_screen = false;
                 on_game_screen = true;
@@ -569,7 +572,7 @@ void render_game_screen(SDL_Renderer *renderer){
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     for(int j = 0; j < MAX_PLAYERS; j++){
         if(directions[j] != 5){
-            for (int i = 0; i < snake_length; i++) {
+            for (int i = 0; i < snake_length[j]; i++) {
                 SDL_Rect segment = {snake[j][i].x * GRID_SIZE, snake[j][i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE};
                 SDL_RenderFillRect(renderer, &segment);
             }
@@ -611,8 +614,8 @@ void render_end_screen(SDL_Renderer *renderer){
 }
 
 void move_snake(int numb, int dir) {
-    for (int i = snake_length - 1; i > 0; i--) {
-        snake[numb][i] = snake[0][i - 1];
+    for (int i = snake_length[numb] - 1; i > 0; i--) {
+        snake[numb][i] = snake[numb][i - 1];
     }
     switch (dir) {
         case 0: snake[numb][0].x++; break;
@@ -658,11 +661,14 @@ char* getNames(int socket){
 }
 
 void send_UDP(struct sockaddr_in socket, int UDPSocket){
-    char buffer[64];
-    memset(buffer, 0, sizeof(buffer));
-    sprintf(buffer, "%d.%d\n",myNumber, my_direction);
-    sendto(UDPSocket, buffer, strlen(buffer), 0, (struct sockaddr *)&socket, sizeof socket);
-    printf("Sent UDP: %s\n", buffer);
+    if(change){
+        char buffer[64];
+        memset(buffer, 0, sizeof(buffer));
+        sprintf(buffer, "%d.%d\n",myNumber, my_direction);
+        sendto(UDPSocket, buffer, strlen(buffer), 0, (struct sockaddr *)&socket, sizeof socket);
+        printf("Sent UDP: %s\n", buffer);
+        change = false;
+    }
 }
 
 void read_TCP(int socket){
@@ -670,7 +676,7 @@ void read_TCP(int socket){
     memset(buffer, 0, sizeof(buffer));
     int total_bytes_read = 0;
     int bytes_read;
-
+    
     while (total_bytes_read < sizeof(buffer) - 1) {
         bytes_read = read(socket, buffer + total_bytes_read, sizeof(buffer) - 1 - total_bytes_read);
         if (bytes_read > 0) {
@@ -698,11 +704,11 @@ void read_TCP(int socket){
             ptr = strchr(ptr, '.') + 1;
             ptr = strchr(ptr, '.') + 1;
         }
-        if (--counter < 0) {
-        counter = 10;
-        snake_length++;
-        }
-        for(int i = 0; i <MAX_PLAYERS; i++){
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            if (--counter[i] < 0) {
+                counter[i] = 10;
+                snake_length[i]++;
+            }
             if(directions[i] != 5){
                 move_snake(i, directions[i]);
             }
