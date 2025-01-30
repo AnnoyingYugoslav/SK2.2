@@ -23,7 +23,7 @@
 #define SCREEN_HEIGHT 600
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
-#define MAX_PLAYERS 2
+#define MAX_PLAYERS 3
 
 typedef struct {
     int x, y;
@@ -66,6 +66,7 @@ void set_blocking(int socket); //set TCP to blocking - needed for writing to ser
 void move_snake(int numb, int dir); //move the snake
 void send_UDP(struct sockaddr_in socket, int sock); //send my direction to server
 void read_TCP(int socket); //read from server
+void* handle_cancel(void* arg);
 
 int main(int argc, char *argv[]) {
     last_accepted_move = 0;
@@ -230,6 +231,31 @@ void render_start_screen(SDL_Renderer *renderer) {
             on_connect_screen = true;
         }
     }
+}
+
+
+void* handle_cancel(void* arg) {
+    int socket = *(int*)arg;
+    free(arg);
+
+    SDL_Event e;
+    while (true) {
+        SDL_PollEvent(&e);
+        if (e.type == SDL_MOUSEBUTTONDOWN) {
+            int x = e.button.x;
+            int y = e.button.y;
+            if (x >= 100 && x <= 300 && y >= 360 && y <= 400) { // Coordinates of the "Cancel" button
+                printf("Cancel, go to start\n");
+                on_start_screen = true;
+                on_connect_screen = false;
+                on_end_screen = false;
+                on_wait_screen = false;
+                sendDisconnect(socket);
+                break;
+            }
+        }
+    }
+    return NULL;
 }
 
 int render_connect_screen(SDL_Renderer *renderer) {
@@ -450,6 +476,11 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
     bool getPort = false;
     bool getMyNumber = false;
     int port = -1;
+    int* socket_ptr = malloc(sizeof(int));
+    *socket_ptr = socket;
+    pthread_t cancel_thread;
+    pthread_create(&cancel_thread, NULL, handle_cancel, socket_ptr);
+    pthread_detach(cancel_thread);
     while (!quit) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {

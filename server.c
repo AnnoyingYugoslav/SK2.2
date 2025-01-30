@@ -19,7 +19,7 @@
 #define SCREEN_HEIGHT 600
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
-#define MAX_PLAYERS 2
+#define MAX_PLAYERS 3
 
 typedef struct {
     int x, y;
@@ -285,10 +285,13 @@ void* handle_disconnects(void * ptr){
     free(ptr);
     char buff[32];
     if(read(socket, buff, sizeof(buff)) > 0){
+        char disc[512];
         if(strcmp("@Disconnect", buff) == 0){
             pthread_mutex_lock(&client_mutex);
             for(int i = 0; i < client_count; i++){
                 if(client_names[i].socket == socket){
+                    memset(disc, 0, sizeof disc);
+                    snprintf(disc, sizeof(disc), "@Disconnected %s", client_names[i].name);
                     printf("%s\n", client_names[i].name);
                     for(int j = i; j < client_count - 1; j++){
                         client_names[j] = client_names[j + 1];
@@ -298,6 +301,9 @@ void* handle_disconnects(void * ptr){
                 }
             }
             pthread_mutex_unlock(&client_mutex);
+        }
+        for(int i = 0; i < client_count; i++){
+            write(client_names[i].socket, disc, sizeof(disc)); 
         }
     }
     close(socket);
