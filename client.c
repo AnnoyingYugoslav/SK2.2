@@ -44,6 +44,7 @@ bool on_end_screen = false;
 bool connect_TCP = false;
 bool connect_UDP = false;
 bool change = false;
+int last_accepted_move = 0;
 char myName[64] = ""; //my name
 char serverAdress[64] = "";
 int directions[4] = {0,0,0,0};
@@ -67,7 +68,7 @@ void send_UDP(struct sockaddr_in socket, int sock); //send my direction to serve
 void read_TCP(int socket); //read from server
 
 int main(int argc, char *argv[]) {
-    int last_accepted_move = 0;
+    last_accepted_move = 0;
     pthread_t threadUDP;
     struct sockaddr_in* UDPsock;
     int portTCP = -1;
@@ -98,10 +99,34 @@ int main(int argc, char *argv[]) {
                 pthread_mutex_lock(&client_mutex);
                 printf("Key pressed\n");
                 switch (e.key.keysym.sym) {
-                    case SDLK_UP:    if (last_accepted_move != 1) my_direction = 3; printf("my_dire %d \n", my_direction); change = true; break;
-                    case SDLK_DOWN:  if (last_accepted_move != 3) my_direction = 1; printf("my_dire %d \n", my_direction); change = true; break;
-                    case SDLK_LEFT:  if (last_accepted_move != 0) my_direction = 2; printf("my_dire %d \n", my_direction); change = true; break;
-                    case SDLK_RIGHT: if (last_accepted_move != 2) my_direction = 0; printf("my_dire %d \n", my_direction); change = true; break;
+                    case SDLK_UP:
+                        if (last_accepted_move != 1) { // Prevent moving down
+                            my_direction = 3;
+                            printf("my_dire %d \n", my_direction);
+                            change = true;
+                        }
+                        break;
+                    case SDLK_DOWN:
+                        if (last_accepted_move != 3) { // Prevent moving up
+                            my_direction = 1;
+                            printf("my_dire %d \n", my_direction);
+                            change = true;
+                        }
+                        break;
+                    case SDLK_LEFT:
+                        if (last_accepted_move != 0) { // Prevent moving right
+                            my_direction = 2;
+                            printf("my_dire %d \n", my_direction);
+                            change = true;
+                        }
+                        break;
+                    case SDLK_RIGHT:
+                        if (last_accepted_move != 2) { // Prevent moving left
+                            my_direction = 0;
+                            printf("my_dire %d \n", my_direction);
+                            change = true;
+                        }
+                        break;
                 }
                 pthread_mutex_unlock(&client_mutex);
             }
@@ -708,5 +733,6 @@ void read_TCP(int socket){
                 move_snake(i, directions[i]);
             }
         }
+        last_accepted_move = directions[myNumber];
     }
 }

@@ -180,49 +180,47 @@ int main(){
         FD_ZERO(&read_fds);
         FD_SET(server_socket, &read_fds);
         int select_result = select(server_socket + 1, &read_fds, NULL, NULL, &timeout);
-        while (select_result > 0) {
-            char buffer[256];
-            memset(buffer, 0, sizeof buffer);
-            int bytes_received = recvfrom(server_socket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
-            if (bytes_received > 0) {
-                int number = -1;
-                int direction2 = 0;
-                sscanf(buffer, "%d.%d\n", &number, &direction2);
-                if(number > -1 && number < client_count && direction2 > -1 && direction2 < 4){
-                    direction[number] = direction2;
-                    printf("Received UDP: %s\n", buffer); // Debug statement
+
+        if (select_result > 0) {
+            if (FD_ISSET(server_socket, &read_fds)) {
+                char buffer[256];
+                memset(buffer, 0, sizeof buffer);
+                int bytes_received = recvfrom(server_socket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
+                if (bytes_received > 0) {
+                    int number = -1;
+                    int direction2 = 0;
+                    sscanf(buffer, "%d.%d\n", &number, &direction2);
+                    if (number > -1 && number < client_count && direction2 > -1 && direction2 < 4) {
+                        direction[number] = direction2;
+                        printf("Received UDP: %s\n", buffer); // Debug statement
+                    }
                 }
             }
-            FD_ZERO(&read_fds);
-            FD_SET(server_socket, &read_fds);
-            timeout.tv_sec = 0;
-            timeout.tv_usec = 0; // No wait, just poll
-            select_result = select(server_socket + 1, &read_fds, NULL, NULL, &timeout);
         }
 
         // Process game state and send updates to clients
-        for(int i = 0; i < client_count; i++){
-            if(alPl[i] == 1){
+        for (int i = 0; i < client_count; i++) {
+            if (alPl[i] == 1) {
                 move_snake(i, direction[i]);
-                if(!(is_not_colliding(i))){
+                if (!(is_not_colliding(i))) {
                     alPl[i] = 0;
                     printf("Killed %d\n", i);
                     alive--;
                 }
             }
         }
+
         char buff[64];
         int curmax = 0;
         memset(buff, 0, sizeof buff);
-        for(int i = 0; i < client_count; i++){
-            if(alPl[i] == 1){
-                curmax += snprintf(buff+ curmax, sizeof buff, "%d.%d.", i, direction[i]);
-            }
-            else{
-                curmax += snprintf(buff+ curmax, sizeof buff, "%d.%d.", i, 5);
+        for (int i = 0; i < client_count; i++) {
+            if (alPl[i] == 1) {
+                curmax += snprintf(buff + curmax, sizeof buff - curmax, "%d.%d.", i, direction[i]);
+            } else {
+                curmax += snprintf(buff + curmax, sizeof buff - curmax, "%d.%d.", i, 5);
             }
         }
-        for(int i = 0; i < client_count; i++){
+        for (int i = 0; i < client_count; i++) {
             write(client_names[i].socket, buff, sizeof buff);
             printf("Sent %s to %d\n", buff, i);
         }
