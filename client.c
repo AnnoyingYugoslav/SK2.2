@@ -23,7 +23,7 @@
 #define SCREEN_HEIGHT 600
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
-#define MAX_PLAYERS 3
+#define MAX_PLAYERS 2
 
 typedef struct {
     int x, y;
@@ -33,6 +33,7 @@ Point snake[MAX_PLAYERS][SNAKE_LENGTH];
 int snake_length;
 Point food;
 int my_direction = 0; //gets my direction
+int myNumber = -1; //my player number on server
 bool running = true; //game running
 bool try_connect = false; //try to connect to server
 bool on_start_screen = true; //start screen
@@ -110,6 +111,8 @@ int main(int argc, char *argv[]) {
             portUDP = render_players_screen(renderer, portTCP);
         }
         else if(on_game_screen){
+            //here send the data to server using udp ("mynumber.direction\n")
+            //every time you get a tcp call its a step in render_game screen
             render_game_screen(renderer);
         }
         else if(on_end_screen){
@@ -389,6 +392,8 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
     SDL_Event e;
     bool quit = false;
     bool getPort = false;
+    bool getMyNumber = false;
+    int port = -1;
     while (!quit) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
@@ -419,14 +424,21 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
                 continue;
             }
             else if (getPort) {
-                int port = atoi(name);
+                port = atoi(name);
                 printf("Port: %d\n", port);
-                return port;
+                getMyNumber = true;
+                getPort = false;
             }
-            else if (strcmp("@Start\n", name) == 0) { //game started
-                printf("Game start detected\n");
+            else if(getMyNumber){
+                mynumber = atoi(name);
+                myNumber = mynumber;
+                getMyNumber = false;
                 on_wait_screen = false;
                 on_game_screen = true;
+                return port;
+            }
+            else if (strcmp("@Start", name) == 0) { //game started
+                printf("Game start detected\n");
                 getPort = true;
             }
             else if (strncmp("@Disconnected", name, strlen("@Disconnected")) == 0) { //handle Disconnect
@@ -524,10 +536,48 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
 }
 
 void render_game_screen(SDL_Renderer *renderer){
-
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+    for(int j = 0; j < currentplayers; j++){
+        if(directions[j] != 5){
+            for (int i = 0; i < snake_length; i++) {
+                SDL_Rect segment = {snake[j][i].x * GRID_SIZE, snake[j][i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE};
+                SDL_RenderFillRect(renderer, &segment);
+            }
+        }
+    }
 }
 void render_end_screen(SDL_Renderer *renderer){
-
+    if (TTF_Init() < 0) {
+        printf("Lib - end screen\n");
+        return;
+    }
+    TTF_Font *font = TTF_OpenFont("font.ttf", 24);
+    if (!font) {
+        printf("Font - end screen\n");
+        TTF_Quit();
+        return;
+    }
+    SDL_Color textColor = {255, 255, 255, 255};
+    SDL_Surface *textSurface = TTF_RenderText_Blended(font, "End", textColor);
+    if (!textSurface) {
+        printf("Surfacet - end screen\n");
+        TTF_CloseFont(font);
+        TTF_Quit();
+        return;
+    }
+    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+    if (!textTexture) {
+        SDL_FreeSurface(textSurface);
+        TTF_CloseFont(font);
+        TTF_Quit();
+        return;
+    }
+    SDL_Rect textRect = {SCREEN_WIDTH / 2 - textSurface->w / 2, SCREEN_HEIGHT / 2 - textSurface->h / 2, textSurface->w, textSurface->h};
+    SDL_FreeSurface(textSurface);
+    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+    SDL_DestroyTexture(textTexture);
+    TTF_CloseFont(font);
+    TTF_Quit();
 }
 
 void move_snake(int numb, int dir) {

@@ -18,7 +18,7 @@
 #define SCREEN_HEIGHT 600
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
-#define MAX_PLAYERS 3
+#define MAX_PLAYERS 2
 
 typedef struct {
     int x, y;
