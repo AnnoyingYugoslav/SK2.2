@@ -156,7 +156,6 @@ int main(int argc, char *argv[]) {
             }
         }
         else if(on_game_screen){
-            printf("Here1\n");
             static int udp_initialized = 0;
             static struct sockaddr_in server_addr;
             if (!udp_initialized) {
@@ -635,17 +634,22 @@ int render_players_screen(SDL_Renderer *renderer, int socket) {
     return -1;
 }
 
-void render_game_screen(SDL_Renderer *renderer){
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    for(int j = 0; j < MAX_PLAYERS; j++){
-        if(directions[j] != 5){
+void render_game_screen(SDL_Renderer *renderer) {
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Green color for the snake
+    for (int j = 0; j < MAX_PLAYERS; j++) {
+        if (directions[j] != 5) {
             for (int i = 0; i < snake_length[j]; i++) {
-                SDL_Rect segment = {snake[j][i].x * GRID_SIZE, snake[j][i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE};
-                SDL_RenderFillRect(renderer, &segment);
+                // Ensure the snake segment is within the window boundaries
+                if (snake[j][i].x >= 0 && snake[j][i].x < SCREEN_WIDTH / GRID_SIZE &&
+                    snake[j][i].y >= 0 && snake[j][i].y < SCREEN_HEIGHT / GRID_SIZE) {
+                    SDL_Rect segment = {snake[j][i].x * GRID_SIZE, snake[j][i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE};
+                    SDL_RenderFillRect(renderer, &segment);
+                }
             }
         }
     }
 }
+
 void render_end_screen(SDL_Renderer *renderer){
     if (TTF_Init() < 0) {
         printf("Lib - end screen\n");
@@ -673,6 +677,8 @@ void render_end_screen(SDL_Renderer *renderer){
         return;
     }
     SDL_Rect textRect = {SCREEN_WIDTH / 2 - textSurface->w / 2, SCREEN_HEIGHT / 2 - textSurface->h / 2, textSurface->w, textSurface->h};
+    SDL_Event e;
+    bool quit = false;
     SDL_FreeSurface(textSurface);
     SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
     SDL_DestroyTexture(textTexture);
