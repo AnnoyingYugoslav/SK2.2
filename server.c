@@ -12,12 +12,14 @@
 #include <sys/time.h>
 
 
+//gcc server.c -o game_server.out -lpthread
+
 #define PI 3.14159265358979323846
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
-#define MAX_PLAYERS 3
+#define MAX_PLAYERS 2
 
 typedef struct {
     int x, y;

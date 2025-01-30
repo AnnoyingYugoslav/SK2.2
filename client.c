@@ -16,7 +16,7 @@
 #include <pthread.h>
 #include <sys/select.h>
 
-//gcc -o snake_game client.c -lSDL2 -lm -lSDL2_ttf
+//gcc -o snake_game client.c -lSDL2 -lm -lSDL2_ttf -lpthread
 
 
 #define LAUNCHER 11111
@@ -25,7 +25,7 @@
 #define SCREEN_HEIGHT 600
 #define GRID_SIZE 20
 #define SNAKE_LENGTH 100
-#define MAX_PLAYERS 3
+#define MAX_PLAYERS 2
 
 typedef struct {
     int x, y;
@@ -156,6 +156,7 @@ int main(int argc, char *argv[]) {
             }
         }
         else if(on_game_screen){
+            printf("Here1\n");
             static int udp_initialized = 0;
             static struct sockaddr_in server_addr;
             if (!udp_initialized) {
@@ -163,6 +164,7 @@ int main(int argc, char *argv[]) {
                 server_addr.sin_family = AF_INET;
                 server_addr.sin_addr.s_addr = inet_addr(serverAdress);
                 server_addr.sin_port = htons(portUDP);
+                printf("Port UDP: %d\n", portUDP);
                 if (inet_pton(AF_INET, serverAdress, &server_addr.sin_addr) <= 0) {
                     exit(EXIT_FAILURE);
                 }
@@ -243,6 +245,9 @@ void* handle_cancel(void* arg) {
 
     SDL_Event e;
     while (true) {
+        if(on_game_screen){
+            return NULL;
+        }
         SDL_PollEvent(&e);
         if (e.type == SDL_MOUSEBUTTONDOWN) {
             int x = e.button.x;
@@ -756,7 +761,10 @@ void read_TCP(int socket){
 
     buffer[total_bytes_read] = '\0';
     if (total_bytes_read > 0) {
-        //printf("Bytes read: %s\n", buffer);
+        if(strcmp(buffer, "@End") == 0){
+            on_game_screen = false;
+            on_end_screen = true;
+        }
         int player, direction;
         char *ptr = buffer;
         while (sscanf(ptr, "%d.%d.", &player, &direction) == 2) {
