@@ -651,20 +651,31 @@ void render_game_screen(SDL_Renderer *renderer) {
 }
 
 void render_end_screen(SDL_Renderer *renderer){
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_Rect button = {350, 275, 100, 50};
+    SDL_RenderFillRect(renderer, &button);
     if (TTF_Init() < 0) {
-        printf("Lib - end screen\n");
+        printf("Lib\n");
         return;
     }
     TTF_Font *font = TTF_OpenFont("font.ttf", 24);
     if (!font) {
-        printf("Font - end screen\n");
+        printf("Font\n");
         TTF_Quit();
         return;
     }
-    SDL_Color textColor = {255, 255, 255, 255};
-    SDL_Surface *textSurface = TTF_RenderText_Blended(font, "End", textColor);
+    SDL_Color textColor = {0, 0, 0, 255};
+    char buff[16];
+    memest(buff,0, sizeof buff);
+    if(directions[myNumber] < 4){
+        strcpy(buff, "You Win!")
+    }
+    else{
+        strcpy(buff, "You Lose!")
+    }
+    SDL_Surface *textSurface = TTF_RenderText_Blended(font, buff, textColor);
     if (!textSurface) {
-        printf("Surfacet - end screen\n");
+        printf("Surfacet\n");
         TTF_CloseFont(font);
         TTF_Quit();
         return;
@@ -676,14 +687,23 @@ void render_end_screen(SDL_Renderer *renderer){
         TTF_Quit();
         return;
     }
-    SDL_Rect textRect = {SCREEN_WIDTH / 2 - textSurface->w / 2, SCREEN_HEIGHT / 2 - textSurface->h / 2, textSurface->w, textSurface->h};
-    SDL_Event e;
-    bool quit = false;
+    SDL_Rect textRect = {button.x + 10, button.y + 10, textSurface->w, textSurface->h};
     SDL_FreeSurface(textSurface);
     SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
     SDL_DestroyTexture(textTexture);
     TTF_CloseFont(font);
     TTF_Quit();
+
+    SDL_Event e;
+    SDL_PollEvent(&e);
+    if (e.type == SDL_MOUSEBUTTONDOWN) {
+        int x = e.button.x;
+        int y = e.button.y;
+        if (x >= 350 && x <= 450 && y >= 275 && y <= 325) {
+            on_start_screen = true;
+            on_end_screen = false;
+        }
+    }
 }
 
 void move_snake(int numb, int dir) {
