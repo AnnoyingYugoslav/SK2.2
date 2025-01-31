@@ -233,12 +233,14 @@ int main(int argc, char *argv[]){
             printf("Sent %s to %d\n", buff, i);
         }
     }
+    sleep(0.2);
     memset(buff, 0, sizeof buff);
-    strcat(buff, "@End\n");
+    strcat(buff, "@End");
     for(int i = 0; i < client_count; i++){
-            write(client_names[i].socket, buff, sizeof buff);
+        if(write(client_names[i].socket, buff, sizeof buff)>0){
             printf("Sent %s to %d\n", buff, i);
         }
+    }
     for(int i = 0; i < client_count; i++){
         close(client_names[i].socket);
     }

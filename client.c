@@ -666,12 +666,12 @@ void render_end_screen(SDL_Renderer *renderer){
     }
     SDL_Color textColor = {0, 0, 0, 255};
     char buff[16];
-    memest(buff,0, sizeof buff);
+    memset(buff,0, sizeof buff);
     if(directions[myNumber] < 4){
-        strcpy(buff, "You Win!")
+        strcpy(buff, "You Win!");
     }
     else{
-        strcpy(buff, "You Lose!")
+        strcpy(buff, "You Lose!");
     }
     SDL_Surface *textSurface = TTF_RenderText_Blended(font, buff, textColor);
     if (!textSurface) {
@@ -785,11 +785,13 @@ void read_TCP(int socket){
         }
     }
 
-    buffer[total_bytes_read] = '\0';
     if (total_bytes_read > 0) {
-        if(strcmp(buffer, "@End") == 0){
+        printf("%s\n", buffer);
+        if(strcmp(buffer, "@End\n") == 0){
+            printf("Reed @End\n");
             on_game_screen = false;
             on_end_screen = true;
+            return;
         }
         int player, direction;
         char *ptr = buffer;
@@ -810,6 +812,16 @@ void read_TCP(int socket){
             }
         }
         last_accepted_move = directions[myNumber];
+        int alive = 0;
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            if(directions[i] < 4){
+                alive++;
+            }
+        }
+        if(alive < 2){
+            on_game_screen = false;
+            on_end_screen = true;
+        }
     }
 }
 
